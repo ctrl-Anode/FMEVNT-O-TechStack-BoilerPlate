@@ -1,0 +1,161 @@
+name: boilerplate
+
+services:
+  # ------------------------------------------------------------
+  # Core infrastructure (always on: `docker compose up -d`)
+  # ------------------------------------------------------------
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - '3306:3306'
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  meili:
+    image: getmeili/meilisearch:v1.10
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
+      MEILI_ENV: production
+    ports:
+      - '7700:7700'
+    volumes:
+      - meili_data:/meili_data
+
+  mailpit:
+    image: axllent/mailpit:v1.20
+    restart: unless-stopped
+    ports:
+      - '1025:1025'
+      - '8025:8025'
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - '9090:9090'
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: 'true'
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - '3001:3000'
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.61.0
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    ports:
+      - '9121:9121'
+
+  # ------------------------------------------------------------
+  # Application stack (production-like: `docker compose --profile app up -d --build`)
+  # ------------------------------------------------------------
+  migrate:
+    profiles: ['app']
+    build: ./server
+    env_file: ./server/.env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+    command: ['npx', 'prisma', 'migrate', 'deploy']
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  api:
+    profiles: ['app']
+    build: ./server
+    restart: unless-stopped
+    env_file: ./server/.env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      MEILI_HOST: http://meili:7700
+      MEILI_API_KEY: ${MEILI_MASTER_KEY}
+      SMTP_HOST: mailpit
+      SMTP_PORT: '1025'
+      WORKER_MODE: standalone
+      STORAGE_LOCAL_PATH: /app/storage
+    volumes:
+      - storage_data:/app/storage
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    profiles: ['app']
+    build: ./server
+    restart: unless-stopped
+    command: ['node', 'src/queues/worker.js']
+    env_file: ./server/.env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      MEILI_HOST: http://meili:7700
+      MEILI_API_KEY: ${MEILI_MASTER_KEY}
+      SMTP_HOST: mailpit
+      SMTP_PORT: '1025'
+      STORAGE_LOCAL_PATH: /app/storage
+    volumes:
+      - storage_data:/app/storage
+    depends_on:
+      api:
+        condition: service_healthy
+
+  web:
+    profiles: ['app']
+    build: ./client
+    restart: unless-stopped
+    ports:
+      - '${APP_PORT:-80}:80'
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  mysql_data:
+  redis_data:
+  meili_data:
+  grafana_data:
+  storage_data:

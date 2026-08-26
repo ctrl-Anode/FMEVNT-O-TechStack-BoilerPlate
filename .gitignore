@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+
+# Builds
+dist/
+build/
+coverage/
+client/dist/
+
+# Environment
+.env
+.env.local
+.env.*.local
+server/.env
+client/.env
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Storage (local uploads)
+storage/
+!storage/.gitkeep
+
+# Prisma
+server/prisma/*.db
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Playwright
+playwright-report/
+test-results/
+blob-report/
+
+# Misc
+*.pem
+firebase-service-account*.json

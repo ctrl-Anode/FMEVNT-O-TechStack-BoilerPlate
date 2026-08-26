@@ -1,0 +1,9 @@
+node_modules
+coverage
+storage
+.env
+.env.*
+*.log
+tests
+vitest.config.js
+eslint.config.js

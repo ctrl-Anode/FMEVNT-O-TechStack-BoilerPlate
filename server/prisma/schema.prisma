@@ -1,0 +1,199 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum FileStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum NotificationChannel {
+  PUSH
+  EMAIL
+}
+
+model User {
+  id              String     @id @default(uuid()) @db.VarChar(36)
+  email           String     @unique @db.VarChar(255)
+  passwordHash    String?    @db.VarChar(255)
+  firstName       String     @db.VarChar(100)
+  lastName        String     @db.VarChar(100)
+  avatarUrl       String?    @db.Text
+  status          UserStatus @default(ACTIVE)
+  mfaEnabled      Boolean    @default(false)
+  mfaSecret       String?    @db.VarChar(255)
+  emailVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  deletedAt       DateTime?
+
+  roles               UserRole[]
+  sessions            Session[]
+  passwordResetTokens PasswordResetToken[]
+  devices             Device[]
+  notifications       Notification[]
+  files               File[]
+  auditLogs           AuditLog[]
+
+  @@index([status])
+  @@map("users")
+}
+
+model Role {
+  id          String  @id @default(uuid()) @db.VarChar(36)
+  name        String  @unique @db.VarChar(50)
+  description String? @db.VarChar(255)
+  isSystem    Boolean @default(false)
+  createdAt   DateTime @default(now())
+
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String  @id @default(uuid()) @db.VarChar(36)
+  key         String  @unique @db.VarChar(100)
+  description String? @db.VarChar(255)
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model UserRole {
+  userId String @db.VarChar(36)
+  roleId String @db.VarChar(36)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  roleId       String @db.VarChar(36)
+  permissionId String @db.VarChar(36)
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model Session {
+  id               String    @id @default(uuid()) @db.VarChar(36)
+  userId           String    @db.VarChar(36)
+  refreshTokenHash String    @unique @db.VarChar(64)
+  userAgent        String?   @db.VarChar(255)
+  ip               String?   @db.VarChar(45)
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  lastUsedAt       DateTime  @default(now())
+  createdAt        DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.VarChar(36)
+  userId    String    @db.VarChar(36)
+  tokenHash String    @unique @db.VarChar(64)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+model Device {
+  id         String   @id @default(uuid()) @db.VarChar(36)
+  userId     String   @db.VarChar(36)
+  fcmToken   String   @unique @db.VarChar(255)
+  platform   String   @default("web") @db.VarChar(20)
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("devices")
+}
+
+model Notification {
+  id        String              @id @default(uuid()) @db.VarChar(36)
+  userId    String?             @db.VarChar(36)
+  channel   NotificationChannel @default(PUSH)
+  title     String              @db.VarChar(255)
+  body      String              @db.Text
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+model File {
+  id           String     @id @default(uuid()) @db.VarChar(36)
+  uploaderId   String?    @db.VarChar(36)
+  key          String     @unique @db.VarChar(500)
+  originalName String?    @db.VarChar(255)
+  mimeType     String     @db.VarChar(100)
+  size         Int
+  width        Int?
+  height       Int?
+  status       FileStatus @default(PENDING)
+  variants     Json?
+  error        String?    @db.Text
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  uploader User? @relation(fields: [uploaderId], references: [id], onDelete: SetNull)
+
+  @@index([uploaderId])
+  @@map("files")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.VarChar(36)
+  userId    String?  @db.VarChar(36)
+  action    String   @db.VarChar(100)
+  entity    String?  @db.VarChar(100)
+  entityId  String?  @db.VarChar(100)
+  meta      Json?
+  ip        String?  @db.VarChar(45)
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@map("audit_logs")
+}
