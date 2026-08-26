@@ -40,7 +40,7 @@ jobs:
       MFA_TOKEN_SECRET: ci-mfa-secret-value-at-least-32-chars-long
       NODE_ENV: test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -58,7 +58,7 @@ jobs:
       run:
         working-directory: client
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -80,7 +80,7 @@ jobs:
     needs: [server, client]
     if: github.event_name == 'push'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v3
       - name: Build API image
         uses: docker/build-push-action@v6
